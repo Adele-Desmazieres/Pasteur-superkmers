@@ -24,6 +24,8 @@ int nucleotide_to_int(char n) {
 	}
 }
 
+// input : un string représentant une séquence ADN
+// output : l'entier codant cette séquence, en base 4
 int seq_to_int(char* seq) {
 	int result = 0;
 	int len = strlen(seq);
@@ -33,11 +35,17 @@ int seq_to_int(char* seq) {
 	return result;
 }
 
-
+// input : un string de la séquence ADN d'un kmer
+// output : le kmer avec sa séquence convertie en int
+// et ses autres attribus initialisés à une valeur nulle
 kmer *seq_to_kmer(char* seq) {
+	kmer *ret = malloc(sizeof(kmer));
+	if (ret == NULL) { perror("malloc"); }
+	ret->sequence = seq_to_int(seq);
+	ret->mmers = NULL;
+	ret->minimiseur = -1;
 	return NULL;
 }
-
 
 
 // input : les entiers k et m
@@ -55,6 +63,7 @@ int check_args_k_m(int k, int m) {
 	return 0;
 }
 
+// fonction principale
 int main(int argc, char *argv[]) {
 	
 	// récupération des arguments
