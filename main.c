@@ -33,7 +33,8 @@ int nucleotide_to_val(char n) {
 long seq_to_val(char* seq, int len) {
 	long result = 0;
 	for (int i = 0; i < len; i++) {
-		result += nucleotide_to_val(seq[i]) * pow(BASE, len-1-i);
+		long tmp = ((long)nucleotide_to_val(seq[i])) * ((long)pow(BASE, len-1-i));
+		result += tmp;
 	}
 	return result;
 }
@@ -44,8 +45,8 @@ char *val_to_seq(long val, int len) {
 	for (int i = 0; i < len; i++) {
 		int nucl_val = 0;
 		// convertisseur base 10 en base 4
-		while (val >= pow(BASE, len-1-i)) {
-			val -= pow(BASE, len-1-i);
+		while (val >= ((long)pow(BASE, len-1-i))) {
+			val -= ((long)pow(BASE, len-1-i));
 			nucl_val += 1;
 		}
 		char c = '-';
@@ -62,7 +63,7 @@ char *val_to_seq(long val, int len) {
 // affiche le contenu d'un kmer, ses mmers et son minimiseur. Ne renvoie rien
 void print_kmer(kmer *km) {
 	char *tmp = val_to_seq(km->seq_val, km->k);
-	printf("%s (", tmp);
+	printf("%ld %s (", km->seq_val, tmp);
 	free(tmp);
 	
 	char *tmp2 = val_to_seq(km->minimiseur, km->m);
@@ -70,7 +71,7 @@ void print_kmer(kmer *km) {
 	free(tmp2);
 	
 	for (int i = 0; i < km->nbr_mmers; i++) {
-		printf("%s ", val_to_seq(km->mmers[i], km->m));
+		//printf("%s ", val_to_seq(km->mmers[i], km->m));
 	}
 	printf("]\n");
 }
@@ -227,7 +228,7 @@ void read_file(FILE *filein, FILE *fileout, int k, int m) {
 		
 		// débug
 		if (i <= 50) { 
-			print_kmer(current);
+			//print_kmer(current);
 		}
 		i += 1;
 
@@ -255,7 +256,6 @@ void read_file(FILE *filein, FILE *fileout, int k, int m) {
 		
 		current = next;
 	}
-	printf("> done <\n");
 }
 
 // input : les entiers k et m
@@ -276,6 +276,8 @@ int check_args_k_m(int k, int m) {
 
 // fonction principale
 int main(int argc, char *argv[]) {
+	
+	printf("Running...\n");
 	
 	// récupération des arguments
 	if (argc != 5) {
@@ -319,10 +321,12 @@ int main(int argc, char *argv[]) {
 	
 	// traitement des données	
 	read_file(filein, fileout, k, m);
-	
+
 	// fermeture des fichiers
 	fclose(fileout);
 	fclose(filein);
+	
+	printf("Done.\n");
 	
 	return 0;
 }
