@@ -3,6 +3,7 @@
 #include <dirent.h>
 #include <math.h>
 #include <string.h>
+#include <limits.h>
 
 #include "kmer.h"
 
@@ -60,12 +61,18 @@ char *val_to_seq(long val, int len) {
 
 // affiche le contenu d'un kmer, ses mmers et son minimiseur. Ne renvoie rien
 void print_kmer(kmer *km) {
-	printf("%s\n", val_to_seq(km->seq_val, km->k));
-	printf("   mmers : ");
+	char *tmp = val_to_seq(km->seq_val, km->k);
+	printf("%s (", tmp);
+	free(tmp);
+	
+	char *tmp2 = val_to_seq(km->minimiseur, km->m);
+	printf("%s) [", tmp2);
+	free(tmp2);
+	
 	for (int i = 0; i < km->nbr_mmers; i++) {
-		printf("%s, ", val_to_seq(km->mmers[i], km->m));
+		printf("%s ", val_to_seq(km->mmers[i], km->m));
 	}
-	printf("\n   minimiseur : %s\n", val_to_seq(km->minimiseur, km->m));
+	printf("]\n");
 }
 
 // comparaison de seq1 et seq2 du début au charactère len
@@ -144,7 +151,7 @@ kmer *next_kmer(kmer *previous, char new_nucl) {
 	ret->seq_val = next_xmer_val(previous->seq_val, k, new_nucl); // nouveau kmer
 	
 	// nouveau mmer
-	int new_mmer = next_xmer_val(previous->mmers[m-1], m, new_nucl);
+	int new_mmer = next_xmer_val(previous->mmers[ret->nbr_mmers-1], m, new_nucl);
 	
 	// nouveau tableau des mmers à partir du précédent, en ajoutant le nouveau mmer et supprimant le 1er
 	int *new_mmers = malloc(ret->nbr_mmers * sizeof(int));
@@ -162,8 +169,9 @@ kmer *next_kmer(kmer *previous, char new_nucl) {
 	// check si l'ancien minimiseur a été supprimé (vérifier s'il etait en premiere place)
 	// dans ce cas, trouver le nouveau minimiseur en parcourant toute la liste
 	else if (previous->minimiseur == previous->mmers[0]) {
+		//printf("minimiseur en 1ere place\n");
 		ret->minimiseur = ret->mmers[0];
-		for (int i = 1; i < ret->m; i++) { // parcours de la liste des mmers
+		for (int i = 1; i < ret->nbr_mmers; i++) { // parcours de la liste des mmers
 			if (cmp_seq(val_to_seq(ret->mmers[i], m), val_to_seq(ret->minimiseur, m), m) < 0) {
 				ret->minimiseur = ret->mmers[i];
 			}
@@ -210,37 +218,45 @@ void read_file(FILE *filein, FILE *fileout, int k, int m) {
 	kmer *next = NULL;
 	
 	char nucl;
-	long superkmer = current->seq_val;
-	int superkmer_len = k;
 	int i = 0;
+	int written = fwrite(first_seq, sizeof(char), k, fileout);
+	if (written != k) { perror("fwrite"); }
 	
 	// lit tous les autres caractères de la séquence et crée les kmers
 	while ((nucl = fgetc(filein)) != EOF) {
-		if (i < 10) { printf("%c %ld\n", nucl, current->seq_val); }
+		
+		// débug
+		if (i <= 50) { 
+			print_kmer(current);
+		}
 		i += 1;
+
 		if (nucl == 'N' || nucl == '\n') {
 			continue;
 		}
 		
 		next = next_kmer(current, nucl);
 		
-		// comparer les minimiseurs pour former le superkmer
+		// si le nouveau minimiseur est identique au précédent
+		// alors on écrit le caractère à la suite du superkmer dans le fichier
 		if (next->minimiseur == current->minimiseur) {
-			superkmer = superkmer * BASE + nucleotide_to_val(nucl); // ajout d'un nucl dans le superkmer
-			superkmer_len += 1;
+			written = fputc(nucl, fileout);
+			if (written == EOF) { perror("fputc"); }
+		
+		// sinon on atteint la fin d'un superkmer, et on passe au suivant
+		// en écrivant la séquence du kmer actuel
 		} else {
-			write_superkmer(fileout, superkmer, superkmer_len);
-			superkmer = next->seq_val;
-			superkmer_len = k;
+			written = fputc('\n', fileout);
+			if (written == EOF) { perror("fputc"); }
+			written = fwrite(val_to_seq(next->seq_val, k), sizeof(char), k, fileout);
+			if (written != k) { perror("fwrite"); }
+			
 		}
 		
 		current = next;
 	}
-	write_superkmer(fileout, superkmer, superkmer_len);
 	printf("> done <\n");
 }
-
-// TODO : comprendre pourquoi des séquences de A sont ajoutées en trop
 
 // input : les entiers k et m
 // output : -1 si k ou m ne respecte pas les conditions d'input, et 0 sinon
