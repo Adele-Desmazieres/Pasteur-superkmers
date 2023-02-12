@@ -66,13 +66,13 @@ void print_kmer(kmer *km) {
 	printf("%ld %s (", km->seq_val, tmp);
 	free(tmp);
 	
-	char *tmp2 = val_to_seq(km->minimiseur, km->m);
-	printf("%s) [", tmp2);
-	free(tmp2);
+	tmp = val_to_seq(km->minimiseur, km->m);
+	printf("%s) [", tmp);
+	free(tmp);
 	
-	for (int i = 0; i < km->nbr_mmers; i++) {
+	//for (int i = 0; i < km->nbr_mmers; i++) {
 		//printf("%s ", val_to_seq(km->mmers[i], km->m));
-	}
+	//}
 	printf("]\n");
 }
 
@@ -82,6 +82,15 @@ void print_kmer(kmer *km) {
 //          1 sinon
 int cmp_seq(char *seq1, char *seq2, int len) {
 	return strncmp(seq1, seq2, len);
+}
+
+int cmp_val(int val1, int val2, int len) {
+	char *tmp1 = val_to_seq(val1, len);
+	char *tmp2 = val_to_seq(val2, len);
+	int ret = cmp_seq(tmp1, tmp2, len);
+	free(tmp1);
+	free(tmp2);
+	return ret;
 }
 
 // fonction appelée une fois, à l'initialisation
@@ -96,7 +105,7 @@ kmer *seq_to_kmer(char *seq, int k, int m) {
 	ret->seq_val = seq_to_val(seq, k);
 	
 	int nbr_mmers = k+1-m;
-	int *mmers = malloc(sizeof(int) * nbr_mmers); // tableau des mmers du kmer, en int
+	long *mmers = malloc(sizeof(long) * nbr_mmers); // tableau des mmers du kmer en nombres
 	char *seq_minimiseur = seq; // garde à jour le minimieur
 	
 	for (int i = 0; i < k+1-m; i++) {
@@ -121,7 +130,7 @@ kmer *seq_to_kmer(char *seq, int k, int m) {
 //          avec l'ajout du nucléotide new_nucl
 long next_xmer_val(long xmer, int x, char new_nucl) {
 	// suppression du coef de poids fort = suppression du nucléotide le plus à gauche
-	long tmp = pow(BASE, x-1);
+	long tmp = (long)pow(BASE, x-1);
 	while (xmer >= tmp) {
 		xmer -= tmp; 
 	}
@@ -149,32 +158,32 @@ kmer *next_kmer(kmer *previous, char new_nucl) {
 	ret->seq_val = next_xmer_val(previous->seq_val, k, new_nucl); // nouveau kmer
 	
 	// nouveau mmer
-	int new_mmer = next_xmer_val(previous->mmers[ret->nbr_mmers-1], m, new_nucl);
+	long new_mmer = next_xmer_val(previous->mmers[ret->nbr_mmers-1], m, new_nucl);
 	
 	// nouveau tableau des mmers à partir du précédent, en ajoutant le nouveau mmer et supprimant le 1er
-	int *new_mmers = malloc(ret->nbr_mmers * sizeof(int));
+	long *new_mmers = malloc(ret->nbr_mmers * sizeof(long));
 	if (new_mmers == NULL) { perror("malloc"); }
-	memcpy(new_mmers, previous->mmers + 1, ret->nbr_mmers * sizeof(int));
+	memcpy(new_mmers, previous->mmers + 1, ret->nbr_mmers * sizeof(long));
 	new_mmers[ret->nbr_mmers-1] = new_mmer;
 	ret->mmers = new_mmers;
 	
 	// nouveau minimiseur
 	// check si le nouveau mmer et plus petit que le dernier minimiseur
-	char *prev_min_seq = val_to_seq(previous->minimiseur, m);
-	if (cmp_seq(val_to_seq(new_mmer, m), prev_min_seq, m) < 0) {
+	if (cmp_val(new_mmer, previous->minimiseur, m) < 0) {
 		ret->minimiseur = new_mmer;
-	}
+	}	
 	// check si l'ancien minimiseur a été supprimé (vérifier s'il etait en premiere place)
 	// dans ce cas, trouver le nouveau minimiseur en parcourant toute la liste
 	else if (previous->minimiseur == previous->mmers[0]) {
-		//printf("minimiseur en 1ere place\n");
+		
 		ret->minimiseur = ret->mmers[0];
 		for (int i = 1; i < ret->nbr_mmers; i++) { // parcours de la liste des mmers
-			if (cmp_seq(val_to_seq(ret->mmers[i], m), val_to_seq(ret->minimiseur, m), m) < 0) {
+			
+			if (cmp_val(ret->mmers[i], ret->minimiseur, m) < 0) {
 				ret->minimiseur = ret->mmers[i];
 			}
 		}
-	} 
+	}
 	// sinon on garde l'ancien minimiseur
 	else { 
 		ret->minimiseur = previous->minimiseur;
@@ -188,14 +197,47 @@ void free_kmer(kmer *kmer) {
 	free(kmer);
 }
 
+
+int write_file_c(FILE *f, char *buff, int buffsize, int remplissage, char c) {
+	buff[remplissage] = c;
+	remplissage += 1;
+	if (remplissage >= buffsize) {
+		int written = fwrite(buff, sizeof(char), remplissage, f);
+		if (written != remplissage) { perror("fwrite"); }
+		remplissage = 0;
+	}
+	return remplissage;
+}
+
+int write_file_s(FILE *f, char *buff, int buffsize, int remplissage, char *s) {
+	if (strlen(s) + remplissage < buffsize) {
+		strcpy(buff+remplissage, s);
+		remplissage += strlen(s);
+		if (remplissage >= buffsize) {
+			int written = fwrite(buff, sizeof(char), remplissage, f);
+			if (written != remplissage) { perror("fwrite"); }
+			remplissage = 0;
+		}
+	} else {
+		int written = fwrite(buff, sizeof(char), remplissage, f);
+		if (written != remplissage) { perror("fwrite"); }
+		written = fwrite(s, sizeof(char), strlen(s), f);
+		if (written != strlen(s)) { perror("fwrite"); }
+		remplissage = 0;
+	}
+	return remplissage;
+}
+
 void read_file(FILE *filein, FILE *fileout, int k, int m) {
 	// ignore la première ligne
 	// TODO : s'assurer que ca fonctionne si la premiere ligne fait plus de 1024 caractères
-	char buff[1024];
-	if (fgets(buff, 1024, filein) == NULL) {
+	int buffsize = 1024;
+	char buff[buffsize];
+	if (fgets(buff, buffsize, filein) == NULL) {
 		printf("Erreur : première ligne vide.\n");
 		exit(1);
 	}
+	int remplissage = 0;
 	
 	// lit les k premiers caractères et crée le 1er kmer
 	char first_seq[k+1];
@@ -208,12 +250,12 @@ void read_file(FILE *filein, FILE *fileout, int k, int m) {
 	kmer *next;
 	
 	char nucl;
-	int written = fwrite(first_seq, sizeof(char), k, fileout);
-	if (written != k) { perror("fwrite"); }
+	remplissage = write_file_s(fileout, buff, buffsize, remplissage, first_seq);
+	//if (written != k) { perror("fwrite"); }
 	
 	// lit tous les autres caractères de la séquence et crée les kmers
 	while ((nucl = fgetc(filein)) != EOF) {
-		// passe les nucléotides inconnus et les sauts de ligne
+		// ignore les nucléotides inconnus et les sauts de ligne
 		if (nucl == 'N' || nucl == '\n') {
 			continue;
 		}
@@ -223,23 +265,26 @@ void read_file(FILE *filein, FILE *fileout, int k, int m) {
 		// si le nouveau minimiseur est identique au précédent
 		// alors on écrit le caractère à la suite du superkmer dans le fichier
 		if (next->minimiseur == current->minimiseur) {
-			written = fputc(nucl, fileout);
-			if (written == EOF) { perror("fputc"); }
+			remplissage = write_file_c(fileout, buff, buffsize, remplissage, nucl);
+			//written = fputc(nucl, fileout);
+			//if (written == EOF) { perror("fputc"); }
 		
 		// sinon on atteint la fin d'un superkmer, et on passe au suivant
 		// en écrivant la séquence du kmer actuel
 		} else {
-			written = fputc('\n', fileout);
-			if (written == EOF) { perror("fputc"); }
-			written = fwrite(val_to_seq(next->seq_val, k), sizeof(char), k, fileout);
-			if (written != k) { perror("fwrite"); }
-			
+			remplissage = write_file_c(fileout, buff, buffsize, remplissage, '\n');
+			char *tmp = val_to_seq(next->seq_val, k);
+			remplissage = write_file_s(fileout, buff, buffsize, remplissage, tmp);
+			free(tmp);
 		}
 		
 		free_kmer(current);
 		current = next;
 	}
 	free_kmer(next);
+	int written = fwrite(buff, sizeof(char), remplissage, fileout);
+	if (written != remplissage) { perror("fwrite"); }
+	remplissage = 0;
 }
 
 
