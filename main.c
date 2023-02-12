@@ -213,11 +213,10 @@ int write_file_c(FILE *f, char *buff, int buffsize, int remplissage, char c) {
 }
 
 int write_file_s(FILE *f, char *buff, int buffsize, int remplissage, char *s) {
-	printf("%s\n", s);
 	if (strlen(s) + remplissage < buffsize) {
-		printf("into buff\n");
 		strncpy(buff+remplissage, s, strlen(s));
 		remplissage += strlen(s);
+
 	} else {
 		int written = fwrite(buff, sizeof(char), remplissage, f);
 		if (written != remplissage) { perror("fwrite"); }
@@ -247,14 +246,11 @@ void read_file(FILE *filein, FILE *fileout, int k, int m) {
 		printf("Erreur : séquence trop courte, de taille inférieure à k.\n");
 		exit(1);
 	}
-	printf("%s\n", first_seq);
 	kmer *current = seq_to_kmer(first_seq, k, m);
-	print_kmer(current);
 	kmer *next;
 	
 	char nucl;
 	remplissage = write_file_s(fileout, buff, buffsize, remplissage, first_seq);
-	int i = 0;
 	
 	// lit tous les autres caractères de la séquence et crée les kmers
 	while ((nucl = fgetc(filein)) != EOF) {
@@ -264,12 +260,7 @@ void read_file(FILE *filein, FILE *fileout, int k, int m) {
 		}
 		
 		next = next_kmer(current, nucl);
-		if (i < 10) {
-			printf("%c\n", nucl);
-			print_kmer(next);
-		}
-		i+=1;
-		
+
 		// si le nouveau minimiseur est identique au précédent
 		// alors on écrit le caractère à la suite du superkmer dans le fichier
 		if (next->minimiseur == current->minimiseur) {
