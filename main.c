@@ -135,10 +135,7 @@ long next_xmer_val(long xmer, int x, char new_nucl) {
 	return xmer;
 }
 
-
-// TODO : fonction qui free un kmer
-
-
+// output : le kmer qui suit celui en argument, après l'ajout du nucléotide new_nucl
 kmer *next_kmer(kmer *previous, char new_nucl) {
 	kmer *ret = malloc(sizeof(kmer));
 	if (ret == NULL) { perror("malloc"); }
@@ -186,17 +183,9 @@ kmer *next_kmer(kmer *previous, char new_nucl) {
 	return ret;
 }
 
-void write_superkmer(FILE *fileout, long superkmer, int len) {
-	char *seq = val_to_seq(superkmer, len);
-	char *seq2 = malloc(len + 2);
-	if (!seq2) { perror("Erreur : malloc"); }
-	
-	strcpy(seq2, seq);
-	seq2[len] = '\n';
-	seq2[len + 1] = '\0';
-	
-	int nb_written = fwrite(seq2, sizeof(char), len+1, fileout);
-	if (nb_written != len+1) { perror("fwrite"); }
+// libère la mémoire d'un kmer
+void free_kmer(kmer *kmer) {
+	free(kmer);
 }
 
 void read_file(FILE *filein, FILE *fileout, int k, int m) {
@@ -216,22 +205,15 @@ void read_file(FILE *filein, FILE *fileout, int k, int m) {
 		exit(1);
 	}
 	kmer *current = seq_to_kmer(first_seq, k, m);	
-	kmer *next = NULL;
+	kmer *next;
 	
 	char nucl;
-	int i = 0;
 	int written = fwrite(first_seq, sizeof(char), k, fileout);
 	if (written != k) { perror("fwrite"); }
 	
 	// lit tous les autres caractères de la séquence et crée les kmers
 	while ((nucl = fgetc(filein)) != EOF) {
-		
-		// débug
-		if (i <= 50) { 
-			//print_kmer(current);
-		}
-		i += 1;
-
+		// passe les nucléotides inconnus et les sauts de ligne
 		if (nucl == 'N' || nucl == '\n') {
 			continue;
 		}
@@ -254,9 +236,12 @@ void read_file(FILE *filein, FILE *fileout, int k, int m) {
 			
 		}
 		
+		free_kmer(current);
 		current = next;
 	}
+	free_kmer(next);
 }
+
 
 // input : les entiers k et m
 // output : -1 si k ou m ne respecte pas les conditions d'input, et 0 sinon

@@ -3,7 +3,7 @@
 
 struct kmer {
     int k; // taille du kmers en nbr de nucléotides
-    int seq_val; // entier représentant la séquence ADN du kmer en base 4
+    long seq_val; // entier représentant la séquence ADN du kmer en base 4
     int *mmers; // tableau des entiers représentant la séquence ADN de chaque mmer
     // ordonné dans le même ordre que les mmers de la séquence
     int m; // taille des mmers
