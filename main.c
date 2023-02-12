@@ -29,8 +29,8 @@ int nucleotide_to_val(char n) {
 
 // input : un string représentant une séquence ADN et la longueur len
 // output : l'entier codant cette séquence jusqu'à len, en base 4
-int seq_to_val(char* seq, int len) {
-	int result = 0;
+long seq_to_val(char* seq, int len) {
+	long result = 0;
 	for (int i = 0; i < len; i++) {
 		result += nucleotide_to_val(seq[i]) * pow(BASE, len-1-i);
 	}
@@ -38,7 +38,7 @@ int seq_to_val(char* seq, int len) {
 }
 
 // output : le string de la séquence ADN de taille len, correspondant à l'entier en argument
-char *val_to_seq(int val, int len) {
+char *val_to_seq(long val, int len) {
 	char *ret = malloc(sizeof(char) * len);
 	for (int i = 0; i < len; i++) {
 		int nucl_val = 0;
@@ -93,7 +93,7 @@ kmer *seq_to_kmer(char *seq, int k, int m) {
 	
 	for (int i = 0; i < k+1-m; i++) {
 		char *seq_current = seq+i;
-		int val = seq_to_val(seq_current, m);
+		long val = seq_to_val(seq_current, m);
 		mmers[i] = val;
 		
 		if (cmp_seq(seq_current, seq_minimiseur, m) < 0) {
@@ -111,9 +111,9 @@ kmer *seq_to_kmer(char *seq, int k, int m) {
 
 // output : l'entier correspondant à la séquence de taille x, suivant celle de xmer
 //          avec l'ajout du nucléotide new_nucl
-int next_xmer_val(int xmer, int x, char new_nucl) {
+long next_xmer_val(long xmer, int x, char new_nucl) {
 	// suppression du coef de poids fort = suppression du nucléotide le plus à gauche
-	int tmp = pow(BASE, x-1);
+	long tmp = pow(BASE, x-1);
 	while (xmer >= tmp) {
 		xmer -= tmp; 
 	}
@@ -128,7 +128,7 @@ int next_xmer_val(int xmer, int x, char new_nucl) {
 }
 
 
-// TODO : une fonction qui free un kmer
+// TODO : fonction qui free un kmer
 
 
 kmer *next_kmer(kmer *previous, char new_nucl) {
@@ -161,7 +161,7 @@ kmer *next_kmer(kmer *previous, char new_nucl) {
 	}
 	// check si l'ancien minimiseur a été supprimé (vérifier s'il etait en premiere place)
 	// dans ce cas, trouver le nouveau minimiseur en parcourant toute la liste
-	else if (cmp_seq(prev_min_seq, val_to_seq(previous->mmers[0], m), m) == 0) {
+	else if (previous->minimiseur == previous->mmers[0]) {
 		ret->minimiseur = ret->mmers[0];
 		for (int i = 1; i < ret->m; i++) { // parcours de la liste des mmers
 			if (cmp_seq(val_to_seq(ret->mmers[i], m), val_to_seq(ret->minimiseur, m), m) < 0) {
@@ -177,41 +177,70 @@ kmer *next_kmer(kmer *previous, char new_nucl) {
 	return ret;
 }
 
+void write_superkmer(FILE *fileout, long superkmer, int len) {
+	char *seq = val_to_seq(superkmer, len);
+	char *seq2 = malloc(len + 2);
+	if (!seq2) { perror("Erreur : malloc"); }
+	
+	strcpy(seq2, seq);
+	seq2[len] = '\n';
+	seq2[len + 1] = '\0';
+	
+	int nb_written = fwrite(seq2, sizeof(char), len+1, fileout);
+	if (nb_written != len+1) { perror("fwrite"); }
+}
 
-void read_file(FILE *file, int k, int m) {
-	// lit la première ligne
+void read_file(FILE *filein, FILE *fileout, int k, int m) {
+	// ignore la première ligne
 	// TODO : s'assurer que ca fonctionne si la premiere ligne fait plus de 1024 caractères
 	char buff[1024];
-	if (fgets(buff, 1024, file) == NULL) {
+	if (fgets(buff, 1024, filein) == NULL) {
 		printf("Erreur : première ligne vide.\n");
 		exit(1);
 	}
 	
-	// lit les k premiers caractères
+	// lit les k premiers caractères et crée le 1er kmer
 	char first_seq[k+1];
-	int nb_read = fread(first_seq, sizeof(char), k, file);
+	int nb_read = fread(first_seq, sizeof(char), k, filein);
 	if (nb_read < k) {
 		printf("Erreur : séquence trop courte, de taille inférieure à k.\n");
 		exit(1);
 	}
-	
-	kmer *current = seq_to_kmer(first_seq, k, m);
+	kmer *current = seq_to_kmer(first_seq, k, m);	
 	kmer *next = NULL;
-	print_kmer(current);
+	
 	char nucl;
-	// lit tous les autres caractères de la séquence
-	while ((nucl = fgetc(file)) != EOF) {
+	long superkmer = current->seq_val;
+	int superkmer_len = k;
+	int i = 0;
+	
+	// lit tous les autres caractères de la séquence et crée les kmers
+	while ((nucl = fgetc(filein)) != EOF) {
+		if (i < 10) { printf("%c %ld\n", nucl, current->seq_val); }
+		i += 1;
 		if (nucl == 'N' || nucl == '\n') {
 			continue;
 		}
 		
 		next = next_kmer(current, nucl);
-		print_kmer(next);
+		
+		// comparer les minimiseurs pour former le superkmer
+		if (next->minimiseur == current->minimiseur) {
+			superkmer = superkmer * BASE + nucleotide_to_val(nucl); // ajout d'un nucl dans le superkmer
+			superkmer_len += 1;
+		} else {
+			write_superkmer(fileout, superkmer, superkmer_len);
+			superkmer = next->seq_val;
+			superkmer_len = k;
+		}
 		
 		current = next;
 	}
+	write_superkmer(fileout, superkmer, superkmer_len);
+	printf("> done <\n");
 }
 
+// TODO : comprendre pourquoi des séquences de A sont ajoutées en trop
 
 // input : les entiers k et m
 // output : -1 si k ou m ne respecte pas les conditions d'input, et 0 sinon
@@ -245,38 +274,39 @@ int main(int argc, char *argv[]) {
 	
 	if (check_args_k_m(k, m) != 0) { exit(1); }
 	
-	FILE *finput = fopen(file_input_name, "r");
-	if (finput == NULL) { 
+	// fichier d'entrée
+	FILE *filein = fopen(file_input_name, "r");
+	if (! filein) { 
 		printf("Erreur : fichier d'entrée introuvable.\n"); 
 		exit(1); 
 	}
 	
-	DIR* dir_out = opendir(dir_output_name);
-	if (! dir_out) { 
-		fclose(finput);
-		printf("Erreur : dossier de sortie introuvable.\n"); 
-		exit(1); 
+	// fichier de sortie
+	int dlen = strlen(dir_output_name);
+	char *nameout;
+	if (dir_output_name[dlen-1] == '/') {
+		nameout = malloc(sizeof(char) * (dlen + 8));
+		if (! nameout) { perror("malloc"); }
+		sprintf(nameout, "%sout.txt", dir_output_name);		
+	} else {
+		nameout = malloc(sizeof(char) * (dlen + 1 + 8));
+		if (! nameout) { perror("malloc"); }
+		sprintf(nameout, "%s/out.txt", dir_output_name);		
+	}
+		
+	FILE *fileout = fopen(nameout, "w+");
+	if (! fileout) {
+		fclose(filein);
+		printf("Erreur : impossible de créer %s.\n", nameout); 
+		exit(1); 		
 	}
 	
+	// traitement des données	
+	read_file(filein, fileout, k, m);
 	
-	// traitement des données
-	// TESTS
-	/*
-	int xmer1 = seq_to_val("CTT", 3); // 01 10 10 = 26
-	printf("%d\n", xmer1);
-	
-	int xmer2 = next_xmer_val(xmer1, 3, 'A'); // 10 10 00 = 40
-	printf("%d\n", xmer2);
-	
-	kmer *km1 = seq_to_kmer("TTAGGACAAA", 5, 3);
-	print_kmer(km1);
-	*/
-	
-	read_file(finput, k, m);
-	
-	
-	fclose(finput);
-    closedir(dir_out);
+	// fermeture des fichiers
+	fclose(fileout);
+	fclose(filein);
 	
 	return 0;
 }
