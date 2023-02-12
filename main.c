@@ -41,7 +41,7 @@ long seq_to_val(char* seq, int len) {
 
 // output : le string de la séquence ADN de taille len, correspondant à l'entier en argument
 char *val_to_seq(long val, int len) {
-	char *ret = malloc(sizeof(char) * len);
+	char *ret = malloc(sizeof(char) * len + 1);
 	for (int i = 0; i < len; i++) {
 		int nucl_val = 0;
 		// convertisseur base 10 en base 4
@@ -57,6 +57,7 @@ char *val_to_seq(long val, int len) {
 		
 		ret[i] = c;
 	}
+	ret[len] = '\0';
 	return ret;
 }
 
@@ -69,6 +70,8 @@ void print_kmer(kmer *km) {
 	tmp = val_to_seq(km->minimiseur, km->m);
 	printf("%s) [", tmp);
 	free(tmp);
+	
+	printf("%d", km->m);
 	
 	//for (int i = 0; i < km->nbr_mmers; i++) {
 		//printf("%s ", val_to_seq(km->mmers[i], km->m));
@@ -136,7 +139,7 @@ long next_xmer_val(long xmer, int x, char new_nucl) {
 	}
 	
 	// décalage de bit
-	xmer *= BASE; // TODO : a remplacer avec un vrai bitshift << et tester l'efficacité
+	xmer *= BASE;
 	
 	// ajout nouveau nucléotide
 	xmer += nucleotide_to_val(new_nucl);
@@ -210,19 +213,16 @@ int write_file_c(FILE *f, char *buff, int buffsize, int remplissage, char c) {
 }
 
 int write_file_s(FILE *f, char *buff, int buffsize, int remplissage, char *s) {
+	printf("%s\n", s);
 	if (strlen(s) + remplissage < buffsize) {
-		strcpy(buff+remplissage, s);
+		printf("into buff\n");
+		strncpy(buff+remplissage, s, strlen(s));
 		remplissage += strlen(s);
-		if (remplissage >= buffsize) {
-			int written = fwrite(buff, sizeof(char), remplissage, f);
-			if (written != remplissage) { perror("fwrite"); }
-			remplissage = 0;
-		}
 	} else {
 		int written = fwrite(buff, sizeof(char), remplissage, f);
 		if (written != remplissage) { perror("fwrite"); }
-		written = fwrite(s, sizeof(char), strlen(s), f);
-		if (written != strlen(s)) { perror("fwrite"); }
+		written = fwrite(s, sizeof(char), strlen(s)-1, f);
+		if (written != strlen(s)-1) { perror("fwrite"); }
 		remplissage = 0;
 	}
 	return remplissage;
@@ -230,9 +230,9 @@ int write_file_s(FILE *f, char *buff, int buffsize, int remplissage, char *s) {
 
 void read_file(FILE *filein, FILE *fileout, int k, int m) {
 	// ignore la première ligne
-	// TODO : s'assurer que ca fonctionne si la premiere ligne fait plus de 1024 caractères
 	int buffsize = 1024;
 	char buff[buffsize];
+	buff[buffsize] = '\0';
 	if (fgets(buff, buffsize, filein) == NULL) {
 		printf("Erreur : première ligne vide.\n");
 		exit(1);
@@ -240,18 +240,21 @@ void read_file(FILE *filein, FILE *fileout, int k, int m) {
 	int remplissage = 0;
 	
 	// lit les k premiers caractères et crée le 1er kmer
-	char first_seq[k+1];
+	char first_seq[k];
+	first_seq[k] = '\0';
 	int nb_read = fread(first_seq, sizeof(char), k, filein);
 	if (nb_read < k) {
 		printf("Erreur : séquence trop courte, de taille inférieure à k.\n");
 		exit(1);
 	}
-	kmer *current = seq_to_kmer(first_seq, k, m);	
+	printf("%s\n", first_seq);
+	kmer *current = seq_to_kmer(first_seq, k, m);
+	print_kmer(current);
 	kmer *next;
 	
 	char nucl;
 	remplissage = write_file_s(fileout, buff, buffsize, remplissage, first_seq);
-	//if (written != k) { perror("fwrite"); }
+	int i = 0;
 	
 	// lit tous les autres caractères de la séquence et crée les kmers
 	while ((nucl = fgetc(filein)) != EOF) {
@@ -261,13 +264,16 @@ void read_file(FILE *filein, FILE *fileout, int k, int m) {
 		}
 		
 		next = next_kmer(current, nucl);
+		if (i < 10) {
+			printf("%c\n", nucl);
+			print_kmer(next);
+		}
+		i+=1;
 		
 		// si le nouveau minimiseur est identique au précédent
 		// alors on écrit le caractère à la suite du superkmer dans le fichier
 		if (next->minimiseur == current->minimiseur) {
 			remplissage = write_file_c(fileout, buff, buffsize, remplissage, nucl);
-			//written = fputc(nucl, fileout);
-			//if (written == EOF) { perror("fputc"); }
 		
 		// sinon on atteint la fin d'un superkmer, et on passe au suivant
 		// en écrivant la séquence du kmer actuel
